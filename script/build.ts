@@ -47,8 +47,8 @@ async function buildAll() {
   ];
   const externals = allDeps.filter((dep) => !allowlist.includes(dep));
 
-  // Always force-externalize native modules regardless of allowlist
-  const forceExternal = ["better-sqlite3", "bindings"];
+  // Always force-externalize native modules and libsql regardless of allowlist
+  const forceExternal = ["@libsql/client"];
 
   await esbuild({
     entryPoints: ["server/index.ts"],

@@ -143,7 +143,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
       }
 
       // 3. Log to DB
-      const log = storage.insertEmailLog({
+      const log = await storage.insertEmailLog({
         from: email.from,
         subject: email.subject,
         body: email.body,
@@ -170,14 +170,14 @@ export async function registerRoutes(httpServer: Server, app: Express) {
   });
 
   // Get recent activity
-  app.get("/api/logs", (_req, res) => {
-    const logs = storage.getEmailLogs(50);
+  app.get("/api/logs", async (_req, res) => {
+    const logs = await storage.getEmailLogs(50);
     res.json(logs);
   });
 
   // Stats
-  app.get("/api/stats", (_req, res) => {
-    const stats = storage.getStats();
+  app.get("/api/stats", async (_req, res) => {
+    const stats = await storage.getStats();
     res.json(stats);
   });
 }

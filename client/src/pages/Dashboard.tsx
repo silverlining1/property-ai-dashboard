@@ -261,7 +261,7 @@ export default function Dashboard() {
   const qc = useQueryClient();
 
   const [form, setForm] = useState({ from: "", subject: "", body: "" });
-  const [result, setResult] = useState<null | { reply: string | null; action: string; classification: Record<string, unknown> }>(null);
+  const [result, setResult] = useState<null | { reply: string | null; action: string; classification: Record<string, unknown>; mock?: boolean }>(null);
 
   const { data: logs = [], isLoading: logsLoading } = useQuery<EmailLog[]>({
     queryKey: ["/api/logs"],
@@ -445,6 +445,11 @@ export default function Dashboard() {
                   <div className="flex items-center gap-3 flex-wrap">
                     <IntentBadge intent={result.classification.intent as string} />
                     <ActionBadge action={result.action} />
+                    {result.mock && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+                        Demo mode — add API credits for live AI
+                      </span>
+                    )}
                     <div className="flex-1 min-w-[120px]">
                       <ConfidenceBar value={parseFloat(result.classification.confidence as string)} />
                     </div>

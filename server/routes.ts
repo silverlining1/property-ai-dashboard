@@ -4,6 +4,41 @@ import Anthropic from "@anthropic-ai/sdk";
 import { storage } from "./storage";
 import { simulateEmailSchema } from "@shared/schema";
 
+// ─── Mock fallback when Anthropic API is unavailable ─────────────────────────
+function mockClassify(email: { subject: string; body: string }) {
+  const text = (email.subject + " " + email.body).toLowerCase();
+  if (/heat|ac|hvac|leak|flood|broken|fix|repair|plumb|electric|pest|mold/.test(text)) {
+    const urgency = /emergency|flood|gas|no heat|freezing|no water|no power/.test(text) ? "emergency"
+      : /urgent|asap|immediately|bad/.test(text) ? "high" : "normal";
+    return { intent: "maintenance_request", confidence: 0.91, maintenance: {
+      description: "Maintenance issue reported — " + email.subject,
+      urgency, location: /bedroom|kitchen|bath|living|unit/.exec(text)?.[0] ?? ""
+    }};
+  }
+  if (/rent|pay|fee|deposit|late|charge|balance/.test(text))
+    return { intent: "payment_question", confidence: 0.88 };
+  if (/mov|vacate|lease end|keys|walk.through|check.out/.test(text))
+    return { intent: "move_in_out", confidence: 0.85 };
+  if (/noise|neighbor|parking|smell|dirty|unsafe/.test(text))
+    return { intent: "complaint", confidence: 0.82 };
+  if (/lawyer|attorney|legal|sue|violation|court/.test(text))
+    return { intent: "needs_human_review", confidence: 0.95, reason: "Potential legal matter" };
+  return { intent: "general_inquiry", confidence: 0.78 };
+}
+
+function mockReply(intent: string, email: { from: string; subject: string }) {
+  const name = email.from.split("@")[0].split(".")[0];
+  const cap = name.charAt(0).toUpperCase() + name.slice(1);
+  const replies: Record<string, string> = {
+    maintenance_request: `Hi ${cap},\n\nThank you for letting me know. I've logged the issue and we'll have someone out to take a look within 24–48 hours. I'll follow up with a specific time once it's scheduled — please let me know if there's a time that works best for you.\n\nEarnest | MySmartRoom`,
+    payment_question: `Hi ${cap},\n\nThanks for reaching out. I'll look into this and get back to you within 1 business day with a clear answer. If there's been an error on our end, we'll get it corrected right away.\n\nEarnest | MySmartRoom`,
+    move_in_out: `Hi ${cap},\n\nGot it — noted on your move-out. I'll send over the move-out checklist and we'll coordinate a walk-through date that works for you. Please give at least 48 hours notice for scheduling.\n\nEarnest | MySmartRoom`,
+    complaint: `Hi ${cap},\n\nI hear you and I take this seriously. I'll look into the situation right away and follow up with next steps. Thank you for bringing this to my attention.\n\nEarnest | MySmartRoom`,
+    general_inquiry: `Hi ${cap},\n\nGreat question — let me look into this and get back to you shortly. Don't hesitate to reach out if you need anything else in the meantime.\n\nEarnest | MySmartRoom`,
+  };
+  return replies[intent] ?? replies.general_inquiry;
+}
+
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const INTENTS = [
@@ -118,9 +153,19 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const email = parsed.data;
     const dateStr = new Date().toISOString();
 
+    let usedMock = false;
     try {
       // 1. Classify
-      const classification = await classifyEmail(email);
+      let classification: Record<string, any>;
+      try {
+        classification = await classifyEmail(email);
+      } catch (apiErr: any) {
+        // Anthropic unavailable / no credits — fall back to mock
+        console.warn("Anthropic API unavailable, using mock classifier:", apiErr?.message);
+        classification = mockClassify(email);
+        usedMock = true;
+      }
+
       const intent: Intent = classification.intent ?? "needs_human_review";
       const confidence: number = parseFloat(classification.confidence ?? 0);
       const maintenance = classification.maintenance ?? null;
@@ -134,12 +179,15 @@ export async function registerRoutes(httpServer: Server, app: Express) {
       if (intent === "needs_human_review" || confidence < CONFIDENCE_THRESHOLD) {
         action = "forwarded";
       } else if (intent === "maintenance_request") {
-        // SMS alert scenario — in demo we simulate SMS
         action = "sms_sent";
-        reply = await generateReply({ ...email, date: dateStr }, intent);
+        reply = usedMock
+          ? mockReply(intent, email)
+          : await generateReply({ ...email, date: dateStr }, intent);
       } else {
         action = "replied";
-        reply = await generateReply({ ...email, date: dateStr }, intent);
+        reply = usedMock
+          ? mockReply(intent, email)
+          : await generateReply({ ...email, date: dateStr }, intent);
       }
 
       // 3. Log to DB
@@ -162,6 +210,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
         classification,
         reply,
         action,
+        mock: usedMock,
       });
     } catch (err: any) {
       console.error("Simulate error:", err);

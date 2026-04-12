@@ -163,9 +163,13 @@ export async function registerRoutes(httpServer: Server, app: Express) {
         reply,
         action,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Simulate error:", err);
-      res.status(500).json({ error: "Agent processing failed. Check server logs." });
+      // Surface auth errors clearly to the client
+      if (err?.status === 401 || err?.type === "authentication_error") {
+        return res.status(500).json({ error: "Anthropic API key is missing or invalid. Set ANTHROPIC_API_KEY in your environment variables." });
+      }
+      res.status(500).json({ error: err?.message ?? "Agent processing failed. Check server logs." });
     }
   });
 

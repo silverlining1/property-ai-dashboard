@@ -1,0 +1,183 @@
+import type { Express } from "express";
+import type { Server } from "http";
+import Anthropic from "@anthropic-ai/sdk";
+import { storage } from "./storage";
+import { simulateEmailSchema } from "@shared/schema";
+
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const INTENTS = [
+  "maintenance_request",
+  "payment_question",
+  "general_inquiry",
+  "move_in_out",
+  "complaint",
+  "needs_human_review",
+] as const;
+
+type Intent = (typeof INTENTS)[number];
+
+async function classifyEmail(email: { from: string; subject: string; body: string }) {
+  const prompt = `Classify the email below into exactly one intent:
+
+  maintenance_request  – broken/damaged item, plumbing, electrical, HVAC, pests, leak, etc.
+  payment_question     – rent, fees, deposits, late charges
+  general_inquiry      – lease terms, rules, amenities, general questions
+  move_in_out          – move-in/move-out scheduling, keys, walk-through, lease end
+  complaint            – noise, neighbor dispute, parking, property condition
+  needs_human_review   – legal threat, aggressive tone, unusual/unclear request
+
+Rate your confidence 0.0–1.0.
+
+If intent is maintenance_request, also extract:
+  description  – concise summary of what needs fixing
+  urgency      – "emergency" | "high" | "normal"
+  location     – room/area in the unit if mentioned, else ""
+
+Return ONLY this JSON:
+{
+  "intent": "...",
+  "confidence": 0.0,
+  "maintenance": {
+    "description": "...",
+    "urgency": "...",
+    "location": "..."
+  }
+}
+
+Email:
+From: ${email.from}
+Subject: ${email.subject}
+
+${email.body.slice(0, 2500)}`;
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-5",
+    max_tokens: 400,
+    system: "You are an email classifier for a residential property management company. Respond ONLY with valid JSON — no markdown, no explanation.",
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  return JSON.parse((response.content[0] as { type: string; text: string }).text.trim());
+}
+
+async function generateReply(email: { from: string; subject: string; body: string; date: string }, intent: Intent) {
+  const hints: Record<string, string> = {
+    payment_question: "Acknowledge the question, give a clear factual answer or direct them to check their portal.",
+    general_inquiry: "Answer helpfully. If you don't have the specific info, say you'll follow up.",
+    move_in_out: "Confirm details, mention any checklist steps or what they need to prepare.",
+    complaint: "Take the concern seriously, acknowledge the inconvenience, state what action you'll take.",
+    maintenance_request:
+      "Thank them for letting you know. Confirm the issue, give an estimated timeline (e.g., 'We'll have someone out within 24–48 hours'), and ask for a good time if needed.",
+  };
+
+  const hint = hints[intent] ?? "Reply helpfully and professionally.";
+
+  const prompt = `Reply to the following tenant email as Earnest.
+
+Detected intent: ${intent}
+Response guidance: ${hint}
+
+--- Incoming Email ---
+From:    ${email.from}
+Subject: ${email.subject}
+Date:    ${email.date}
+
+${email.body.slice(0, 2000)}
+---
+
+Write the reply email body now:`;
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-5",
+    max_tokens: 800,
+    system: `You are Earnest, a property manager at MySmartRoom.
+
+Your communication style:
+• Warm but professional — you care about your tenants
+• Acknowledge the tenant's concern right away
+• Be clear about next steps and timelines
+• Keep replies concise — no fluff
+• Always sign off as:  Earnest | MySmartRoom
+
+IMPORTANT: Write only the email body. No subject line. No meta-commentary.`,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  return (response.content[0] as { type: string; text: string }).text.trim();
+}
+
+export async function registerRoutes(httpServer: Server, app: Express) {
+  // Simulate an email through the agent pipeline
+  app.post("/api/simulate", async (req, res) => {
+    const parsed = simulateEmailSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors });
+    }
+
+    const email = parsed.data;
+    const dateStr = new Date().toISOString();
+
+    try {
+      // 1. Classify
+      const classification = await classifyEmail(email);
+      const intent: Intent = classification.intent ?? "needs_human_review";
+      const confidence: number = parseFloat(classification.confidence ?? 0);
+      const maintenance = classification.maintenance ?? null;
+
+      // 2. Determine action
+      let action: string;
+      let reply: string | null = null;
+
+      const CONFIDENCE_THRESHOLD = 0.72;
+
+      if (intent === "needs_human_review" || confidence < CONFIDENCE_THRESHOLD) {
+        action = "forwarded";
+      } else if (intent === "maintenance_request") {
+        // SMS alert scenario — in demo we simulate SMS
+        action = "sms_sent";
+        reply = await generateReply({ ...email, date: dateStr }, intent);
+      } else {
+        action = "replied";
+        reply = await generateReply({ ...email, date: dateStr }, intent);
+      }
+
+      // 3. Log to DB
+      const log = storage.insertEmailLog({
+        from: email.from,
+        subject: email.subject,
+        body: email.body,
+        intent,
+        confidence: confidence.toFixed(2),
+        urgency: maintenance?.urgency ?? null,
+        maintenanceDescription: maintenance?.description ?? null,
+        maintenanceLocation: maintenance?.location ?? null,
+        reply,
+        action,
+        createdAt: Date.now(),
+      });
+
+      res.json({
+        log,
+        classification,
+        reply,
+        action,
+      });
+    } catch (err) {
+      console.error("Simulate error:", err);
+      res.status(500).json({ error: "Agent processing failed. Check server logs." });
+    }
+  });
+
+  // Get recent activity
+  app.get("/api/logs", (_req, res) => {
+    const logs = storage.getEmailLogs(50);
+    res.json(logs);
+  });
+
+  // Stats
+  app.get("/api/stats", (_req, res) => {
+    const stats = storage.getStats();
+    res.json(stats);
+  });
+}

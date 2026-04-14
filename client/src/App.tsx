@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/not-found";
 
-function App() {
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router hook={useHashLocation}>
@@ -19,5 +19,3 @@ function App() {
     </QueryClientProvider>
   );
 }
-
-export default App;

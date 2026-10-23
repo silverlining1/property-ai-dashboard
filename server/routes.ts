@@ -7,7 +7,9 @@ import {
   broadcastSchema, triggerScoreDropSchema,
 } from "@shared/schema";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Demo text goes to the cloud model only when explicitly enabled; otherwise the offline mock is used.
+const useClaude = process.env.DEMO_USE_CLAUDE === "true" && !!process.env.ANTHROPIC_API_KEY;
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "disabled" });
 
 // ── SSE clients ───────────────────────────────────────────────────────────────
 const sseClients = new Set<Response>();
@@ -60,6 +62,7 @@ function mockClassify(text: string) {
 
 // ── Claude classifier ─────────────────────────────────────────────────────────
 async function classifyMessage(body: string): Promise<any> {
+  if (!useClaude) throw new Error("cloud model disabled");
   const prompt = `Classify this tenant message into exactly one intent:
   maintenance_request, payment_question, general_inquiry, move_in_out, complaint, needs_human_review
 
@@ -78,6 +81,7 @@ Message: ${body.slice(0, 1500)}`;
 
 // ── Claude reply generator ────────────────────────────────────────────────────
 async function generateReply(body: string, intent: string, tenantName: string): Promise<string> {
+  if (!useClaude) throw new Error("cloud model disabled");
   const hints: Record<string, string> = {
     payment_question: "Answer clearly and helpfully about the payment question.",
     general_inquiry: "Answer helpfully and warmly.",

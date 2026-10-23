@@ -2,10 +2,19 @@ services:
   - type: web
     name: mysmartroom-property-ai
     env: node
-    buildCommand: npm install && npm rebuild better-sqlite3 --build-from-source && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm start
+    healthCheckPath: /healthz
     envVars:
-      - key: ANTHROPIC_API_KEY
-        sync: false
       - key: NODE_ENV
         value: production
+      # Required: the app refuses to start in production without it (16+ chars).
+      - key: DEMO_PASSWORD
+        generateValue: true
+      - key: DEMO_USER
+        value: demo
+      # Optional: set DEMO_USE_CLAUDE=true and ANTHROPIC_API_KEY to use the live model instead of the offline mock.
+      - key: DEMO_USE_CLAUDE
+        value: "false"
+      - key: ANTHROPIC_API_KEY
+        sync: false

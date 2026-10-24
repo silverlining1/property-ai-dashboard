@@ -91,7 +91,7 @@ async function generateReply(body: string, intent: string, tenantName: string): 
   };
   const res = await anthropic.messages.create({
     model: "claude-sonnet-4-5", max_tokens: 500,
-    system: `You are Earnest, property manager at MySmartRoom. Reply warmly and professionally. Sign off as: Earnest | MySmartRoom. Write body only, no subject line.`,
+    system: `You are Earnest, property manager at Code Alchemist Labs. Reply warmly and professionally. Sign off as: Earnest | PropAI. Write body only, no subject line.`,
     messages: [{ role: "user", content: `Reply to ${tenantName}'s message.\nGuidance: ${hints[intent] ?? "Be helpful."}\n\nMessage: ${body}` }],
   });
   return (res.content[0] as any).text.trim();
@@ -101,11 +101,11 @@ async function generateReply(body: string, intent: string, tenantName: string): 
 function mockReply(intent: string, tenantName: string): string {
   const first = tenantName.split(" ")[0];
   const replies: Record<string, string> = {
-    maintenance_request: `Hi ${first},\n\nThank you for letting us know. I've logged this issue and we'll have someone out within 24–48 hours. I'll send you a follow-up with the scheduled time.\n\nEarnest | MySmartRoom`,
-    payment_question: `Hi ${first},\n\nThanks for reaching out. I'll look into this and get back to you within 1 business day. If there's been an error on our end we'll correct it immediately.\n\nEarnest | MySmartRoom`,
-    move_in_out: `Hi ${first},\n\nGot it — noted on your move-out. I'll send over the checklist and we'll coordinate a walk-through. Please give 48 hours notice for scheduling.\n\nEarnest | MySmartRoom`,
-    complaint: `Hi ${first},\n\nI hear you and I take this seriously. I'll look into the situation right away and follow up with next steps.\n\nEarnest | MySmartRoom`,
-    general_inquiry: `Hi ${first},\n\nGreat question — let me look into this and get back to you shortly. Don't hesitate to reach out in the meantime.\n\nEarnest | MySmartRoom`,
+    maintenance_request: `Hi ${first},\n\nThank you for letting us know. I've logged this issue and we'll have someone out within 24–48 hours. I'll send you a follow-up with the scheduled time.\n\nEarnest | PropAI`,
+    payment_question: `Hi ${first},\n\nThanks for reaching out. I'll look into this and get back to you within 1 business day. If there's been an error on our end we'll correct it immediately.\n\nEarnest | PropAI`,
+    move_in_out: `Hi ${first},\n\nGot it — noted on your move-out. I'll send over the checklist and we'll coordinate a walk-through. Please give 48 hours notice for scheduling.\n\nEarnest | PropAI`,
+    complaint: `Hi ${first},\n\nI hear you and I take this seriously. I'll look into the situation right away and follow up with next steps.\n\nEarnest | PropAI`,
+    general_inquiry: `Hi ${first},\n\nGreat question — let me look into this and get back to you shortly. Don't hesitate to reach out in the meantime.\n\nEarnest | PropAI`,
   };
   return replies[intent] ?? replies.general_inquiry;
 }
@@ -182,7 +182,7 @@ async function processTenantMessage(memberId: number, body: string) {
 
     // SMS to owner
     const ownerSms = await storage.insertSms({
-      to: "earnest@mysmartroom.com", toName: "Earnest Walker",
+      to: "earnest@codealchemistlabs.com", toName: "Earnest Walker",
       body: `🔧 ${isEmergency ? "🚨 EMERGENCY" : "Maintenance"} — ${member.unit} (${member.name}): ${ticket.description.slice(0, 100)}`,
       type: isEmergency ? "emergency" : "owner_alert",
       ticketId: ticket.id, createdAt: now + 3,
@@ -199,7 +199,7 @@ async function processTenantMessage(memberId: number, body: string) {
     if (vendor) {
       const vendorSms = await storage.insertSms({
         to: vendor.phone, toName: vendor.name,
-        body: `New job from MySmartRoom — ${member.unit}: ${ticket.description.slice(0, 80)}. Contact tenant: ${member.email}`,
+        body: `New job from PropAI — ${member.unit}: ${ticket.description.slice(0, 80)}. Contact tenant: ${member.email}`,
         type: "vendor_dispatch", ticketId: ticket.id, createdAt: now + 5,
       });
       smsSent.push(vendorSms);

@@ -605,14 +605,14 @@ export default function Dashboard() {
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-[1400px] mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-label="MySmartRoom AI" className="text-primary">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-label="PropAI" className="text-primary">
               <rect width="28" height="28" rx="7" fill="currentColor" fillOpacity="0.12" />
               <path d="M7 14h4l2-5 3 10 2-5h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               <circle cx="21" cy="8" r="2" fill="currentColor" />
             </svg>
             <div>
-              <span className="font-semibold text-sm">MySmartRoom</span>
-              <span className="text-muted-foreground text-sm"> · Property AI</span>
+              <span className="font-semibold text-sm">PropAI</span>
+              <span className="text-muted-foreground text-sm"> · Code Alchemist Labs</span>
             </div>
           </div>
           <div className="flex items-center gap-3">

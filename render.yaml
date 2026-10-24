@@ -1,10 +1,12 @@
 services:
   - type: web
-    name: mysmartroom-property-ai
+    name: propai-property-manager
     env: node
     buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
+    domains:
+      - propertymanager.codealchemistlabs.com
     envVars:
       - key: NODE_ENV
         value: production

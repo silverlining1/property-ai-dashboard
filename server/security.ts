@@ -21,13 +21,15 @@ export function apiOrigin(): string {
 // it is always served at "/"). Everything else — /demo, the simulation's /api and any other path — is
 // gated. An allowlist, because Express route matching is case-insensitive (/API/... reaches /api routes).
 const CONSOLE_PATHS = /^\/(index\.html|favicon\.png|assets\/[\w.-]+)?$/;
+// Development only: the Vite dev server serves the console's source modules from these prefixes.
+const VITE_DEV_PATHS = /^\/(src|@vite|@react-refresh|@id|@fs|node_modules)\//;
 
 export function assertSecureConfig() {
   if (isProd && (process.env.DEMO_PASSWORD ?? "").length < 16) {
     throw new Error("Refusing to start: DEMO_PASSWORD (16+ chars) must be set in production");
   }
-  const origin = apiOrigin();
-  if (isProd && !(origin.startsWith("https://") || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))) {
+  // HTTPS only: an https console cannot call a plain-http API (browsers block mixed content).
+  if (isProd && !apiOrigin().startsWith("https://")) {
     throw new Error("Refusing to start: VITE_PROPAI_API_URL must be an https URL in production");
   }
 }
@@ -42,6 +44,7 @@ function basicAuth(req: Request, res: Response, next: NextFunction) {
   const password = process.env.DEMO_PASSWORD;
   if (!password) return next(); // local development only (startup check enforces it in production)
   if (CONSOLE_PATHS.test(req.path)) return next(); // the console has its own sign-in
+  if (!isProd && VITE_DEV_PATHS.test(req.path)) return next();
   const header = req.headers.authorization ?? "";
   if (header.startsWith("Basic ")) {
     const decoded = Buffer.from(header.slice(6), "base64").toString();

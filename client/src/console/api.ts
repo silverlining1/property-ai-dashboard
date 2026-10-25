@@ -43,6 +43,12 @@ function setAccessToken(token: string | null) {
   if (changed) listeners.forEach((fn) => fn(token !== null));
 }
 
+function endSession() {
+  sessionEpoch += 1;
+  refreshing = null;
+  setAccessToken(null);
+}
+
 async function errorFrom(res: Response): Promise<ApiError> {
   let message = res.statusText || `Request failed (${res.status})`;
   try {
@@ -77,10 +83,12 @@ export async function refreshSession(): Promise<boolean> {
     const signedOut = await loggingOut.then(() => true, () => false);
     if (signedOut) return false; // the session is over; don't start a refresh that could revive it
   }
+  const epoch = sessionEpoch;
   refreshing ??= authRequest("/v1/auth/refresh")
     .then(() => true)
     .catch((err) => {
-      if (err instanceof ApiError && err.status === 401) setAccessToken(null);
+      // The cookie was refused: the session is over, unless a new sign-in has started in the meantime.
+      if (err instanceof ApiError && err.status === 401 && epoch === sessionEpoch) endSession();
       return false;
     })
     .finally(() => {
@@ -89,10 +97,16 @@ export async function refreshSession(): Promise<boolean> {
   return refreshing;
 }
 
-export const login = (email: string, password: string) => authRequest("/v1/auth/login", { email, password });
+// Each sign-in starts a new session, so requests from an earlier one can't act under it.
+export function login(email: string, password: string) {
+  sessionEpoch += 1;
+  return authRequest("/v1/auth/login", { email, password });
+}
 
-export const signup = (org_name: string, name: string, email: string, password: string) =>
-  authRequest("/v1/auth/signup", { org_name, name, email, password });
+export function signup(org_name: string, name: string, email: string, password: string) {
+  sessionEpoch += 1;
+  return authRequest("/v1/auth/signup", { org_name, name, email, password });
+}
 
 /** Ends the session only once the server has cleared the refresh cookie; otherwise throws, so the UI
  *  never shows "signed out" while a reload would silently sign the user back in. */
@@ -103,9 +117,7 @@ export function logout(): Promise<void> {
     await refreshing;
     const res = await fetch(`${API_URL}/v1/auth/logout`, { method: "POST", credentials: "include", headers: WEB_CLIENT });
     if (!res.ok) throw await errorFrom(res);
-    sessionEpoch += 1;
-    refreshing = null;
-    setAccessToken(null);
+    endSession();
   })().finally(() => {
     loggingOut = null;
   });
@@ -130,10 +142,13 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
     if (epoch !== sessionEpoch || !(await refreshSession()) || epoch !== sessionEpoch) throw await errorFrom(res);
     res = await send(accessToken);
     // Fresh token still refused: the session is gone (unless the user has since signed out and back in).
-    if (res.status === 401 && epoch === sessionEpoch) setAccessToken(null);
+    if (res.status === 401 && epoch === sessionEpoch) endSession();
   }
   if (!res.ok) throw await errorFrom(res);
-  return (res.status === 204 ? undefined : await res.json()) as T;
+  const data = (res.status === 204 ? undefined : await res.json()) as T;
+  // The session ended while this was in flight: don't hand its result to the UI of a later session.
+  if (epoch !== sessionEpoch) throw new ApiError(401, "Signed out");
+  return data;
 }
 
 // ---- API shapes ---------------------------------------------------------------------------------

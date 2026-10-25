@@ -10,6 +10,7 @@ export default function ResetPassword({ token }: { token: string }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [mismatch, setMismatch] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -17,7 +18,7 @@ export default function ResetPassword({ token }: { token: string }) {
     e.preventDefault();
     setError(null);
     if (password !== confirm) {
-      setError("The passwords don't match");
+      setMismatch(true);
       return;
     }
     setBusy(true);
@@ -45,12 +46,22 @@ export default function ResetPassword({ token }: { token: string }) {
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="password">New password</Label>
-          <Input id="password" type="password" required minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+          <Input id="password" type="password" required minLength={12} value={password} onChange={(e) => { setPassword(e.target.value); setMismatch(false); }} autoComplete="new-password" />
           <p className="text-xs text-muted-foreground">{PASSWORD_HINT}</p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="confirm">Confirm new password</Label>
-          <Input id="confirm" type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+          <Input
+            id="confirm"
+            type="password"
+            required
+            value={confirm}
+            onChange={(e) => { setConfirm(e.target.value); setMismatch(false); }}
+            autoComplete="new-password"
+            aria-invalid={mismatch || undefined}
+            aria-describedby={mismatch ? "confirm-error" : undefined}
+          />
+          <FormError id="confirm-error" error={mismatch ? "The passwords don't match" : null} />
         </div>
         <FormError error={error} />
         <Button type="submit" className="w-full" disabled={busy}>

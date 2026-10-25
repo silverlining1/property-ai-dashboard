@@ -20,8 +20,13 @@ export function useEmailLink(): EmailLink | null {
   return link;
 }
 
+/** Removes the single-use token from the address bar and history, without leaving the page. */
+export function forgetEmailLinkToken(to = "/") {
+  window.history.replaceState(null, "", `#${to}`);
+}
+
 /** Leaves a link page, replacing the history entry so the single-use token isn't kept in history. */
 export function leaveEmailLink(to = "/") {
-  window.history.replaceState(null, "", `#${to}`);
+  forgetEmailLinkToken(to);
   window.dispatchEvent(new HashChangeEvent("hashchange"));
 }

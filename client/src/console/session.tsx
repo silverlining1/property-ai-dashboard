@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { api, logout as apiLogout, onSessionChange, refreshSession, type Me } from "./api";
 
 type SessionState =
@@ -16,6 +17,7 @@ interface SessionValue {
 const SessionContext = createContext<SessionValue | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
+  const qc = useQueryClient();
   const [state, setState] = useState<SessionState>({ status: "loading" });
 
   const loadMe = useCallback(async () => {
@@ -35,8 +37,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   // After a successful sign-in, a failed profile load is reported to the form, not treated as a sign-out.
   const signedIn = useCallback(async () => {
-    setState({ status: "signed-in", me: await api<Me>("/v1/me") });
-  }, []);
+    const me = await api<Me>("/v1/me");
+    // Accepting an invitation can switch accounts without passing through signed-out: drop the old cache.
+    qc.clear();
+    setState({ status: "signed-in", me });
+  }, [qc]);
 
   const logout = useCallback(async () => {
     await apiLogout();

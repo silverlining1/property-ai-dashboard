@@ -134,12 +134,19 @@ export async function resetPassword(token: string, password: string): Promise<vo
 /** Changes the password. Other sessions end; this one continues with the fresh tokens (and cookie) returned. */
 export async function changePassword(current_password: string, new_password: string): Promise<void> {
   const epoch = sessionEpoch;
-  const res = await fetch(`${API_URL}/v1/me/password`, {
-    method: "POST",
-    credentials: "include",
-    headers: { ...WEB_CLIENT, "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
-    body: JSON.stringify({ current_password, new_password }),
-  });
+  const send = () =>
+    fetch(`${API_URL}/v1/me/password`, {
+      method: "POST",
+      credentials: "include",
+      headers: { ...WEB_CLIENT, "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      body: JSON.stringify({ current_password, new_password }),
+    });
+  let res = await send();
+  if (res.status === 401) {
+    // Expired access token: refresh once and retry, as api() does. A 401 means nothing was changed.
+    if (epoch !== sessionEpoch || !(await refreshSession()) || epoch !== sessionEpoch) throw await errorFrom(res);
+    res = await send();
+  }
   if (!res.ok) throw await errorFrom(res);
   const tokens = (await res.json()) as Tokens;
   if (epoch === sessionEpoch) setAccessToken(tokens.access_token);

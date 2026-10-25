@@ -20,10 +20,10 @@ export function AuthCard({ title, description, children }: { title: string; desc
   );
 }
 
-export function FormError({ error }: { error: string | null }) {
+export function FormError({ error, id }: { error: string | null; id?: string }) {
   if (!error) return null;
   return (
-    <p role="alert" className="text-sm text-destructive">
+    <p id={id} role="alert" className="text-sm text-destructive">
       {error}
     </p>
   );

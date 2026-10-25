@@ -33,16 +33,20 @@ export default function Account() {
 function ChangePassword() {
   const [form, setForm] = useState({ current: "", next: "", confirm: "" });
   const [error, setError] = useState<string | null>(null);
+  const [mismatch, setMismatch] = useState(false);
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm({ ...form, [k]: e.target.value });
+    if (k !== "current") setMismatch(false); // editing either new-password field clears the mismatch
+  };
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setDone(false);
     if (form.next !== form.confirm) {
-      setError("The new passwords don't match");
+      setMismatch(true);
       return;
     }
     setBusy(true);
@@ -76,7 +80,17 @@ function ChangePassword() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="confirm">Confirm new password</Label>
-            <Input id="confirm" type="password" required value={form.confirm} onChange={set("confirm")} autoComplete="new-password" />
+            <Input
+              id="confirm"
+              type="password"
+              required
+              value={form.confirm}
+              onChange={set("confirm")}
+              autoComplete="new-password"
+              aria-invalid={mismatch || undefined}
+              aria-describedby={mismatch ? "confirm-error" : undefined}
+            />
+            <FormError id="confirm-error" error={mismatch ? "The new passwords don't match" : null} />
           </div>
           <FormError error={error} />
           {done && (

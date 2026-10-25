@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { acceptInvitation, publicPost, type InvitationPreview } from "./api";
 import { AuthCard, FormError, PASSWORD_HINT, errorText } from "./AuthCard";
-import { leaveEmailLink } from "./emailLinks";
+import { forgetEmailLinkToken, leaveEmailLink } from "./emailLinks";
 import { label } from "./format";
 import { useSession } from "./session";
 
@@ -22,6 +22,9 @@ export default function AcceptInvite({ token }: { token: string }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Set once the invitation is accepted but the profile couldn't be loaded: the user has joined,
+  // and a reload restores the session from the refresh cookie.
+  const [joinedOrg, setJoinedOrg] = useState<string | null>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -29,13 +32,30 @@ export default function AcceptInvite({ token }: { token: string }) {
     setBusy(true);
     try {
       await acceptInvitation(token, password, name);
-      await signedIn();
-      leaveEmailLink("/approvals");
     } catch (err) {
       setError(errorText(err));
+      setBusy(false);
+      return;
+    }
+    forgetEmailLinkToken("/approvals"); // the token is spent: never offer it for a retry
+    try {
+      await signedIn();
+      leaveEmailLink("/approvals");
+    } catch {
+      setJoinedOrg(preview.data?.org_name ?? "the organization");
     } finally {
       setBusy(false);
     }
+  }
+
+  if (joinedOrg) {
+    return (
+      <AuthCard title={`You've joined ${joinedOrg}`} description="We couldn't load your account just now.">
+        <Button className="w-full" onClick={() => window.location.reload()}>
+          Continue
+        </Button>
+      </AuthCard>
+    );
   }
 
   if (preview.isLoading) return <AuthCard title="Checking your invitation…">{null}</AuthCard>;

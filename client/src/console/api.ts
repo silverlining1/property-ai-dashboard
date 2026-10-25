@@ -112,22 +112,25 @@ export function logout(): Promise<void> {
   return loggingOut;
 }
 
-/** Authenticated JSON request; refreshes the access token once on 401. */
+/** Authenticated JSON request; refreshes the access token once on 401. A request stays bound to the
+ *  session it started in: it never retries with, or signs out, a session begun after a sign-out. */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
-  const send = () =>
+  const epoch = sessionEpoch;
+  const send = (token: string | null) =>
     fetch(`${API_URL}${path}`, {
       method: init.method ?? "GET",
       headers: {
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
       },
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
-  let res = await send();
+  let res = await send(accessToken);
   if (res.status === 401) {
-    if (!(await refreshSession())) throw await errorFrom(res);
-    res = await send();
-    if (res.status === 401) setAccessToken(null); // fresh token still refused: the session is gone
+    if (epoch !== sessionEpoch || !(await refreshSession()) || epoch !== sessionEpoch) throw await errorFrom(res);
+    res = await send(accessToken);
+    // Fresh token still refused: the session is gone (unless the user has since signed out and back in).
+    if (res.status === 401 && epoch === sessionEpoch) setAccessToken(null);
   }
   if (!res.ok) throw await errorFrom(res);
   return (res.status === 204 ? undefined : await res.json()) as T;

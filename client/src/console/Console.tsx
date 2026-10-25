@@ -1,4 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Redirect, Route, Router, Switch } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import Approvals from "./Approvals";
@@ -10,6 +11,16 @@ import { SessionProvider, useSession } from "./session";
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: true } },
 });
+
+/** Drop cached tenant data whenever nobody is signed in, so the next person on this browser never sees it. */
+function ClearCacheOnSignOut() {
+  const qc = useQueryClient();
+  const { state } = useSession();
+  useEffect(() => {
+    if (state.status === "signed-out") qc.clear();
+  }, [state.status, qc]);
+  return null;
+}
 
 function Routes() {
   const { state } = useSession();
@@ -35,6 +46,7 @@ export default function Console() {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
+        <ClearCacheOnSignOut />
         <Router hook={useHashLocation}>
           <Routes />
         </Router>

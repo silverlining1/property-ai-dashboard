@@ -8,7 +8,7 @@ type SessionState =
 
 interface SessionValue {
   state: SessionState;
-  /** Call after login/signup succeeds; loads the profile. */
+  /** Call after login/signup succeeds; loads the profile and throws if that fails. */
   signedIn: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -33,12 +33,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     });
   }, [loadMe]);
 
+  // After a successful sign-in, a failed profile load is reported to the form, not treated as a sign-out.
+  const signedIn = useCallback(async () => {
+    setState({ status: "signed-in", me: await api<Me>("/v1/me") });
+  }, []);
+
   const logout = useCallback(async () => {
     await apiLogout();
     setState({ status: "signed-out" });
   }, []);
 
-  return <SessionContext.Provider value={{ state, signedIn: loadMe, logout }}>{children}</SessionContext.Provider>;
+  return <SessionContext.Provider value={{ state, signedIn, logout }}>{children}</SessionContext.Provider>;
 }
 
 export function useSession(): SessionValue {

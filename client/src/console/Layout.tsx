@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,16 @@ export default function Layout({ children }: { children: ReactNode }) {
   const me = useMe();
   const { logout } = useSession();
   const [location] = useLocation();
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+
+  async function signOut() {
+    setSignOutError(null);
+    try {
+      await logout();
+    } catch {
+      setSignOutError("Couldn't sign out — check your connection and try again.");
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -41,7 +51,12 @@ export default function Layout({ children }: { children: ReactNode }) {
             <span className="hidden sm:inline text-muted-foreground truncate max-w-[16rem]">
               {me.org.name} · {me.user.name || me.user.email} ({label(me.role)})
             </span>
-            <Button variant="outline" size="sm" onClick={() => logout()}>
+            {signOutError && (
+              <span role="alert" className="text-destructive text-xs">
+                {signOutError}
+              </span>
+            )}
+            <Button variant="outline" size="sm" onClick={signOut}>
               Sign out
             </Button>
           </div>

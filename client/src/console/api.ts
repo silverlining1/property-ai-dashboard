@@ -62,12 +62,13 @@ async function authRequest(path: string, body?: unknown): Promise<Tokens> {
   return tokens;
 }
 
-/** Restore or extend the session from the refresh cookie. Resolves false when signed out. */
+/** Restore or extend the session from the refresh cookie. Resolves false if it could not be refreshed;
+ *  the session is only ended when the server rejects the cookie (401), not on a network failure. */
 export function refreshSession(): Promise<boolean> {
   refreshing ??= authRequest("/v1/auth/refresh")
     .then(() => true)
-    .catch(() => {
-      setAccessToken(null);
+    .catch((err) => {
+      if (err instanceof ApiError && err.status === 401) setAccessToken(null);
       return false;
     })
     .finally(() => {
@@ -81,12 +82,12 @@ export const login = (email: string, password: string) => authRequest("/v1/auth/
 export const signup = (org_name: string, name: string, email: string, password: string) =>
   authRequest("/v1/auth/signup", { org_name, name, email, password });
 
+/** Ends the session only once the server has cleared the refresh cookie; otherwise throws, so the UI
+ *  never shows "signed out" while a reload would silently sign the user back in. */
 export async function logout(): Promise<void> {
-  try {
-    await fetch(`${API_URL}/v1/auth/logout`, { method: "POST", credentials: "include", headers: WEB_CLIENT });
-  } finally {
-    setAccessToken(null);
-  }
+  const res = await fetch(`${API_URL}/v1/auth/logout`, { method: "POST", credentials: "include", headers: WEB_CLIENT });
+  if (!res.ok) throw await errorFrom(res);
+  setAccessToken(null);
 }
 
 /** Authenticated JSON request; refreshes the access token once on 401. */
@@ -101,8 +102,11 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
   let res = await send();
-  if (res.status === 401 && (await refreshSession())) res = await send();
-  if (res.status === 401) setAccessToken(null);
+  if (res.status === 401) {
+    if (!(await refreshSession())) throw await errorFrom(res);
+    res = await send();
+    if (res.status === 401) setAccessToken(null); // fresh token still refused: the session is gone
+  }
   if (!res.ok) throw await errorFrom(res);
   return (res.status === 204 ? undefined : await res.json()) as T;
 }

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, logout as apiLogout, onSessionChange, refreshSession, type Me } from "./api";
 
@@ -19,17 +19,25 @@ const SessionContext = createContext<SessionValue | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const [state, setState] = useState<SessionState>({ status: "loading" });
+  // Bumped by signedIn(): the mount-time session restore must not overwrite a sign-in that started later.
+  const generation = useRef(0);
 
-  const loadMe = useCallback(async () => {
+  const loadMe = useCallback(async (gen: number) => {
     try {
-      setState({ status: "signed-in", me: await api<Me>("/v1/me") });
+      const me = await api<Me>("/v1/me");
+      if (gen === generation.current) setState({ status: "signed-in", me });
     } catch {
-      setState({ status: "signed-out" });
+      if (gen === generation.current) setState({ status: "signed-out" });
     }
   }, []);
 
   useEffect(() => {
-    refreshSession().then((ok) => (ok ? loadMe() : setState({ status: "signed-out" })));
+    const gen = generation.current;
+    refreshSession().then((ok) => {
+      if (gen !== generation.current) return;
+      if (ok) void loadMe(gen);
+      else setState({ status: "signed-out" });
+    });
     return onSessionChange((signedIn) => {
       if (!signedIn) setState({ status: "signed-out" });
     });
@@ -37,6 +45,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   // After a successful sign-in, a failed profile load is reported to the form, not treated as a sign-out.
   const signedIn = useCallback(async () => {
+    generation.current += 1;
     // Accepting an invitation can switch accounts without passing through signed-out: drop the old
     // account's cache before anything else, and don't keep its identity if the new profile fails to load.
     qc.clear();

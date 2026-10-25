@@ -147,6 +147,8 @@ export async function changePassword(current_password: string, new_password: str
     // Expired access token: refresh once and retry, as api() does. A 401 means nothing was changed.
     if (epoch !== sessionEpoch || !(await refreshSession()) || epoch !== sessionEpoch) throw await errorFrom(res);
     res = await send();
+    // Fresh token still refused: the session is gone, as in api().
+    if (res.status === 401 && epoch === sessionEpoch) endSession();
   }
   if (!res.ok) throw await errorFrom(res);
   const tokens = (await res.json()) as Tokens;

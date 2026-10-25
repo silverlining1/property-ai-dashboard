@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { resetPassword } from "./api";
 import { AuthCard, FormError, PASSWORD_HINT, errorText } from "./AuthCard";
-import { leaveEmailLink } from "./emailLinks";
+import { forgetEmailLinkToken, leaveEmailLink } from "./emailLinks";
 
 export default function ResetPassword({ token }: { token: string }) {
   const [password, setPassword] = useState("");
@@ -24,6 +24,7 @@ export default function ResetPassword({ token }: { token: string }) {
     setBusy(true);
     try {
       await resetPassword(token, password);
+      forgetEmailLinkToken("/"); // the token is spent: keep it out of the address bar and history
       setDone(true);
     } catch (err) {
       setError(errorText(err));

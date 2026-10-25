@@ -45,7 +45,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   // After a successful sign-in, a failed profile load is reported to the form, not treated as a sign-out.
   const signedIn = useCallback(async () => {
-    generation.current += 1;
+    const gen = ++generation.current;
     // Accepting an invitation can switch accounts without passing through signed-out: drop the old
     // account's cache before anything else, and don't keep its identity if the new profile fails to load.
     qc.clear();
@@ -54,10 +54,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       me = await api<Me>("/v1/me");
     } catch (err) {
       // Never leave a previous identity, or a "loading" state whose restore this call superseded.
-      setState({ status: "signed-out" });
+      if (gen === generation.current) setState({ status: "signed-out" });
       throw err;
     }
-    setState({ status: "signed-in", me });
+    if (gen === generation.current) setState({ status: "signed-in", me });
   }, [qc]);
 
   const logout = useCallback(async () => {

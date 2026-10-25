@@ -127,8 +127,9 @@ export async function publicPost<T>(path: string, body: unknown): Promise<T> {
 
 /** Completes a password reset. The API signs the account out everywhere, so this browser's session ends too. */
 export async function resetPassword(token: string, password: string): Promise<void> {
+  const epoch = sessionEpoch;
   await publicPost("/v1/auth/password-reset/confirm", { token, password });
-  endSession();
+  if (epoch === sessionEpoch) endSession(); // don't end a session that started while this was in flight
 }
 
 /** Changes the password. Other sessions end; this one continues with the fresh tokens (and cookie) returned. */

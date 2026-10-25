@@ -149,7 +149,8 @@ export async function changePassword(current_password: string, new_password: str
   }
   if (!res.ok) throw await errorFrom(res);
   const tokens = (await res.json()) as Tokens;
-  if (epoch === sessionEpoch) setAccessToken(tokens.access_token);
+  if (epoch !== sessionEpoch) throw new ApiError(401, "Signed out"); // a newer session replaced this one
+  setAccessToken(tokens.access_token);
 }
 
 /** Ends the session only once the server has cleared the refresh cookie; otherwise throws, so the UI

@@ -53,7 +53,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       me = await api<Me>("/v1/me");
     } catch (err) {
-      setState((s) => (s.status === "signed-in" ? { status: "signed-out" } : s));
+      // Never leave a previous identity, or a "loading" state whose restore this call superseded.
+      setState({ status: "signed-out" });
       throw err;
     }
     setState({ status: "signed-in", me });

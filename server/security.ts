@@ -22,7 +22,7 @@ export function apiOrigin(): string {
 // gated. An allowlist, because Express route matching is case-insensitive (/API/... reaches /api routes).
 const CONSOLE_PATHS = /^\/(index\.html|favicon\.png|assets\/[\w.-]+)?$/;
 // Development only: the Vite dev server serves the console's source modules from these prefixes.
-const VITE_DEV_PATHS = /^\/(src|@vite|@react-refresh|@id|@fs|node_modules)\//;
+const VITE_DEV_PATHS = /^\/(?:src|@vite|@react-refresh|@id|@fs|node_modules)(?:\/|$)/;
 
 export function assertSecureConfig() {
   if (isProd && (process.env.DEMO_PASSWORD ?? "").length < 16) {

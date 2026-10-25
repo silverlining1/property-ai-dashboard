@@ -24,6 +24,9 @@ type Tokens = { access_token: string; org_id: string; role: string };
 
 let accessToken: string | null = null;
 let refreshing: Promise<boolean> | null = null;
+// Bumped on sign-out. A token response that belongs to an earlier session (a refresh still in flight when
+// the user signed out) is dropped instead of quietly signing them back in.
+let sessionEpoch = 0;
 const listeners = new Set<(signedIn: boolean) => void>();
 
 export function onSessionChange(fn: (signedIn: boolean) => void): () => void {
@@ -50,6 +53,7 @@ async function errorFrom(res: Response): Promise<ApiError> {
 }
 
 async function authRequest(path: string, body?: unknown): Promise<Tokens> {
+  const epoch = sessionEpoch;
   const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
     credentials: "include",
@@ -58,6 +62,7 @@ async function authRequest(path: string, body?: unknown): Promise<Tokens> {
   });
   if (!res.ok) throw await errorFrom(res);
   const tokens = (await res.json()) as Tokens;
+  if (epoch !== sessionEpoch) throw new ApiError(401, "Signed out");
   setAccessToken(tokens.access_token);
   return tokens;
 }
@@ -85,8 +90,12 @@ export const signup = (org_name: string, name: string, email: string, password: 
 /** Ends the session only once the server has cleared the refresh cookie; otherwise throws, so the UI
  *  never shows "signed out" while a reload would silently sign the user back in. */
 export async function logout(): Promise<void> {
+  // Let a refresh that is already running land first, so its Set-Cookie can't arrive after (and undo) ours.
+  await refreshing;
   const res = await fetch(`${API_URL}/v1/auth/logout`, { method: "POST", credentials: "include", headers: WEB_CLIENT });
   if (!res.ok) throw await errorFrom(res);
+  sessionEpoch += 1;
+  refreshing = null;
   setAccessToken(null);
 }
 

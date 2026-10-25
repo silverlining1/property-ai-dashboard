@@ -5,8 +5,13 @@ import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/not-found";
+import Console from "./console/Console";
 
-export default function App() {
+// /demo is the original simulation (password-gated by the server); everything else is the console,
+// which signs in against the PropAI platform API.
+const isDemo = window.location.pathname.replace(/\/+$/, "") === "/demo";
+
+function Demo() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router hook={useHashLocation}>
@@ -18,4 +23,8 @@ export default function App() {
       <Toaster />
     </QueryClientProvider>
   );
+}
+
+export default function App() {
+  return isDemo ? <Demo /> : <Console />;
 }

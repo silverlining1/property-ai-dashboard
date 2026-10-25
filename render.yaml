@@ -10,11 +10,15 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # Required: the app refuses to start in production without it (16+ chars).
+      # Password for the /demo simulation (the console uses real accounts). Required in production, 16+ chars.
       - key: DEMO_PASSWORD
         generateValue: true
       - key: DEMO_USER
         value: demo
+      # PropAI platform API the console signs in against (used at build time by the client and at
+      # runtime for the CSP). Deployed from silverlining1/property-management-agent's render.yaml.
+      - key: VITE_PROPAI_API_URL
+        value: https://api.propertymanager.codealchemistlabs.com
       # Optional: set DEMO_USE_CLAUDE=true and ANTHROPIC_API_KEY to use the live model instead of the offline mock.
       - key: DEMO_USE_CLAUDE
         value: "false"

@@ -31,8 +31,8 @@ function Routes() {
   const { state } = useSession();
   // Links from invitation and password-reset emails work whether or not someone is signed in.
   const link = useEmailLink();
-  if (link?.page === "accept-invite") return <AcceptInvite token={link.token} />;
-  if (link?.page === "reset-password") return <ResetPassword token={link.token} />;
+  if (link?.page === "accept-invite") return <AcceptInvite key={link.token} token={link.token} />;
+  if (link?.page === "reset-password") return <ResetPassword key={link.token} token={link.token} />;
   if (state.status === "loading") {
     return <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">Loading…</div>;
   }

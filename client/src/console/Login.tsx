@@ -21,13 +21,14 @@ export default function Login() {
   const [form, setForm] = useState({ org: "", name: "", email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
+  const [resetSentTo, setResetSentTo] = useState<string | null>(null);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 
   function switchTo(next: Mode) {
+    if (busy) return; // a pending request must not land on a different view
     setMode(next);
     setError(null);
-    setResetSent(false);
+    setResetSentTo(null);
   }
 
   async function submit(e: FormEvent) {
@@ -36,8 +37,9 @@ export default function Login() {
     setBusy(true);
     try {
       if (mode === "forgot") {
-        await publicPost("/v1/auth/password-reset", { email: form.email });
-        setResetSent(true);
+        const email = form.email;
+        await publicPost("/v1/auth/password-reset", { email });
+        setResetSentTo(email);
         return;
       }
       if (mode === "login") await login(form.email, form.password);
@@ -50,9 +52,9 @@ export default function Login() {
     }
   }
 
-  if (resetSent) {
+  if (resetSentTo !== null) {
     return (
-      <AuthCard title="Check your email" description={`If ${form.email} has a PropAI account, we've sent it a link to reset the password.`}>
+      <AuthCard title="Check your email" description={`If ${resetSentTo} has a PropAI account, we've sent it a link to reset the password.`}>
         <p className="text-sm text-muted-foreground">The link works once and expires in an hour.</p>
         <Button variant="outline" className="w-full mt-4" onClick={() => switchTo("login")}>
           Back to sign in
@@ -85,7 +87,7 @@ export default function Login() {
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
               {mode === "login" && (
-                <button type="button" className="text-xs text-primary underline-offset-4 hover:underline" onClick={() => switchTo("forgot")}>
+                <button type="button" className="text-xs text-primary underline-offset-4 hover:underline" disabled={busy} onClick={() => switchTo("forgot")}>
                   Forgot password?
                 </button>
               )}
@@ -112,6 +114,7 @@ export default function Login() {
         <button
           type="button"
           className="text-primary underline-offset-4 hover:underline"
+          disabled={busy}
           onClick={() => switchTo(mode === "login" ? "signup" : "login")}
         >
           {mode === "login" ? "Create an organization" : "Sign in"}

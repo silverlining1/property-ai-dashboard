@@ -7,6 +7,7 @@ import { changePassword } from "./api";
 import { FormError, PASSWORD_HINT, errorText } from "./AuthCard";
 import { label } from "./format";
 import { useMe } from "./session";
+import { TwoFactorCard } from "./TwoFactor";
 
 export default function Account() {
   const me = useMe();
@@ -26,6 +27,7 @@ export default function Account() {
         </CardContent>
       </Card>
       <ChangePassword />
+      <TwoFactorCard />
     </div>
   );
 }

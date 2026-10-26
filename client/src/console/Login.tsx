@@ -2,9 +2,10 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { login, publicPost, signup } from "./api";
+import { login, publicPost, signup, type MfaChallenge } from "./api";
 import { AuthCard, FormError, PASSWORD_HINT, errorText } from "./AuthCard";
 import { useSession } from "./session";
+import { SecondStep } from "./TwoFactor";
 
 type Mode = "login" | "signup" | "forgot";
 
@@ -22,6 +23,7 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resetSentTo, setResetSentTo] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 
   function switchTo(next: Mode) {
@@ -42,14 +44,34 @@ export default function Login() {
         setResetSentTo(email);
         return;
       }
-      if (mode === "login") await login(form.email, form.password);
-      else await signup(form.org, form.name, form.email, form.password);
+      if (mode === "login") {
+        const pending = await login(form.email, form.password);
+        if (pending) {
+          setChallenge(pending); // the password checked out; the second step signs in
+          return;
+        }
+      } else {
+        await signup(form.org, form.name, form.email, form.password);
+      }
       await signedIn();
     } catch (err) {
       setError(errorText(err));
     } finally {
       setBusy(false);
     }
+  }
+
+  if (challenge) {
+    return (
+      <SecondStep
+        challenge={challenge}
+        onSignedIn={signedIn}
+        onCancel={() => {
+          setChallenge(null);
+          setForm({ ...form, password: "" });
+        }}
+      />
+    );
   }
 
   if (resetSentTo !== null) {

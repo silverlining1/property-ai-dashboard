@@ -20,7 +20,11 @@ export class ApiError extends Error {
   }
 }
 
-type Tokens = { access_token: string; org_id: string; role: string };
+type Tokens = { access_token: string; org_id: string; role: string; recovery_codes?: string[] };
+
+/** A password-verified sign-in that still owes a second step: a code ("verify"), or setting up two-factor
+ *  because the organization requires it ("setup"). The token is short-lived and is not a session. */
+export type MfaChallenge = { kind: "verify" | "setup"; token: string };
 
 let accessToken: string | null = null;
 let refreshing: Promise<boolean> | null = null;
@@ -61,7 +65,7 @@ async function errorFrom(res: Response): Promise<ApiError> {
   return new ApiError(res.status, message);
 }
 
-async function authRequest(path: string, body?: unknown): Promise<Tokens> {
+async function authRequest(path: string, body?: unknown): Promise<Tokens | MfaChallenge> {
   const epoch = sessionEpoch;
   const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
@@ -70,10 +74,21 @@ async function authRequest(path: string, body?: unknown): Promise<Tokens> {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw await errorFrom(res);
-  const tokens = (await res.json()) as Tokens;
+  const data = await res.json();
   if (epoch !== sessionEpoch) throw new ApiError(401, "Signed out");
-  setAccessToken(tokens.access_token);
-  return tokens;
+  if (typeof data.mfa_token === "string") return { kind: data.mfa_setup_required ? "setup" : "verify", token: data.mfa_token };
+  setAccessToken(data.access_token);
+  return data as Tokens;
+}
+
+/** Sign-in calls resolve to null once signed in, or to the challenge for the second step. */
+const challengeOf = (r: Tokens | MfaChallenge): MfaChallenge | null => ("kind" in r ? r : null);
+
+/** For calls that only ever answer with a session. */
+async function sessionRequest(path: string, body: unknown): Promise<Tokens> {
+  const r = await authRequest(path, body);
+  if ("kind" in r) throw new ApiError(401, "Your sign-in has expired; sign in again");
+  return r;
 }
 
 /** Restore or extend the session from the refresh cookie. Resolves false if it could not be refreshed;
@@ -98,20 +113,58 @@ export async function refreshSession(): Promise<boolean> {
 }
 
 // Each sign-in starts a new session, so requests from an earlier one can't act under it.
-export function login(email: string, password: string) {
+export async function login(email: string, password: string): Promise<MfaChallenge | null> {
   sessionEpoch += 1;
-  return authRequest("/v1/auth/login", { email, password });
+  return challengeOf(await authRequest("/v1/auth/login", { email, password }));
 }
 
-export function signup(org_name: string, name: string, email: string, password: string) {
+export async function signup(org_name: string, name: string, email: string, password: string): Promise<void> {
   sessionEpoch += 1;
-  return authRequest("/v1/auth/signup", { org_name, name, email, password });
+  await sessionRequest("/v1/auth/signup", { org_name, name, email, password });
 }
 
-/** Joins the org from an emailed invitation and signs in as the invited account. */
-export function acceptInvitation(token: string, password: string, name: string) {
+/** Joins the org from an emailed invitation and signs in as the invited account (or asks for a code). */
+export async function acceptInvitation(token: string, password: string, name: string): Promise<MfaChallenge | null> {
   sessionEpoch += 1;
-  return authRequest("/v1/invitations/accept", { token, password, name });
+  return challengeOf(await authRequest("/v1/invitations/accept", { token, password, name }));
+}
+
+// ---- two-factor ----------------------------------------------------------------------------------
+
+export interface MfaSetup {
+  secret: string;
+  otpauth_uri: string;
+}
+
+/** Second step of sign-in: an authenticator code or a recovery code. */
+export async function verifyMfa(challenge: MfaChallenge, code: string): Promise<void> {
+  await sessionRequest("/v1/auth/mfa/verify", { mfa_token: challenge.token, code });
+}
+
+/** Setup during sign-in, when the organization requires two-factor. */
+export const startMfaSetupAtSignIn = (challenge: MfaChallenge) =>
+  publicPost<MfaSetup>("/v1/auth/mfa/setup", { mfa_token: challenge.token });
+
+/** Turns two-factor on and signs in. Resolves to the new recovery codes. */
+export async function confirmMfaSetupAtSignIn(challenge: MfaChallenge, code: string): Promise<string[]> {
+  const tokens = await sessionRequest("/v1/auth/mfa/setup/confirm", { mfa_token: challenge.token, code });
+  return tokens.recovery_codes ?? [];
+}
+
+export const startMfaSetup = () => api<MfaSetup>("/v1/me/mfa/setup", { method: "POST" });
+
+/** Turns two-factor on for the signed-in account. Other sessions end; this one continues with fresh tokens.
+ *  Resolves to the new recovery codes. */
+export async function enableMfa(code: string): Promise<string[]> {
+  const tokens = await rotateSession("/v1/me/mfa/enable", { code });
+  return tokens.recovery_codes ?? [];
+}
+
+export const disableMfa = (password: string, code: string) =>
+  api<void>("/v1/me/mfa/disable", { method: "POST", body: { password, code } });
+
+export async function replaceRecoveryCodes(code: string): Promise<string[]> {
+  return (await api<{ recovery_codes: string[] }>("/v1/me/mfa/recovery-codes", { method: "POST", body: { code } })).recovery_codes;
 }
 
 /** Unauthenticated JSON POST for the emailed-link pages. */
@@ -134,13 +187,18 @@ export async function resetPassword(token: string, password: string): Promise<vo
 
 /** Changes the password. Other sessions end; this one continues with the fresh tokens (and cookie) returned. */
 export async function changePassword(current_password: string, new_password: string): Promise<void> {
+  await rotateSession("/v1/me/password", { current_password, new_password });
+}
+
+/** An authenticated POST that ends every other session and answers with fresh tokens (and cookie) for this one. */
+async function rotateSession(path: string, body: unknown): Promise<Tokens> {
   const epoch = sessionEpoch;
   const send = () =>
-    fetch(`${API_URL}/v1/me/password`, {
+    fetch(`${API_URL}${path}`, {
       method: "POST",
       credentials: "include",
       headers: { ...WEB_CLIENT, "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
-      body: JSON.stringify({ current_password, new_password }),
+      body: JSON.stringify(body),
     });
   let res = await send();
   if (res.status === 401) {
@@ -154,6 +212,7 @@ export async function changePassword(current_password: string, new_password: str
   const tokens = (await res.json()) as Tokens;
   if (epoch !== sessionEpoch) throw new ApiError(401, "Signed out"); // a newer session replaced this one
   setAccessToken(tokens.access_token);
+  return tokens;
 }
 
 /** Ends the session only once the server has cleared the refresh cookie; otherwise throws, so the UI
@@ -207,6 +266,7 @@ export interface Me {
   user: { id: string; email: string; name: string };
   org: { id: string; name: string; plan: string };
   role: Role;
+  mfa: { enabled: boolean; required: boolean; recovery_codes_left: number };
 }
 
 export interface ConversationSummary {
@@ -256,6 +316,7 @@ export interface Member {
   name: string;
   role: Role;
   active: boolean;
+  mfa: boolean;
 }
 
 export interface Invitation {

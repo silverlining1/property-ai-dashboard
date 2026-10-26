@@ -11,10 +11,18 @@ interface SessionValue {
   state: SessionState;
   /** Call after login/signup succeeds; loads the profile and throws if that fails. */
   signedIn: () => Promise<void>;
+  /** Reloads the profile after a change to it (keeps the query cache). */
+  refreshMe: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
+
+// An API from before two-factor existed answers without `mfa`: treat that as off rather than crash the pages.
+const fetchMe = async () => {
+  const me = await api<Me>("/v1/me");
+  return { ...me, mfa: me.mfa ?? { enabled: false, required: false, recovery_codes_left: 0 } };
+};
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
@@ -24,7 +32,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const loadMe = useCallback(async (gen: number) => {
     try {
-      const me = await api<Me>("/v1/me");
+      const me = await fetchMe();
       if (gen === generation.current) setState({ status: "signed-in", me });
     } catch {
       if (gen === generation.current) setState({ status: "signed-out" });
@@ -51,7 +59,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     qc.clear();
     let me: Me;
     try {
-      me = await api<Me>("/v1/me");
+      me = await fetchMe();
     } catch (err) {
       // Never leave a previous identity, or a "loading" state whose restore this call superseded.
       if (gen === generation.current) setState({ status: "signed-out" });
@@ -60,12 +68,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (gen === generation.current) setState({ status: "signed-in", me });
   }, [qc]);
 
+  const refreshMe = useCallback(async () => {
+    const gen = generation.current;
+    const me = await fetchMe();
+    if (gen === generation.current) setState((prev) => (prev.status === "signed-in" ? { status: "signed-in", me } : prev));
+  }, []);
+
   const logout = useCallback(async () => {
     await apiLogout();
     setState({ status: "signed-out" });
   }, []);
 
-  return <SessionContext.Provider value={{ state, signedIn, logout }}>{children}</SessionContext.Provider>;
+  return <SessionContext.Provider value={{ state, signedIn, refreshMe, logout }}>{children}</SessionContext.Provider>;
 }
 
 export function useSession(): SessionValue {

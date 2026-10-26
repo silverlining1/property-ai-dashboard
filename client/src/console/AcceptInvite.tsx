@@ -3,11 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { acceptInvitation, publicPost, type InvitationPreview } from "./api";
+import { acceptInvitation, publicPost, type InvitationPreview, type MfaChallenge } from "./api";
 import { AuthCard, FormError, PASSWORD_HINT, errorText } from "./AuthCard";
 import { forgetEmailLinkToken, leaveEmailLink } from "./emailLinks";
 import { label } from "./format";
 import { useSession } from "./session";
+import { SecondStep } from "./TwoFactor";
 
 export default function AcceptInvite({ token }: { token: string }) {
   const { signedIn } = useSession();
@@ -25,19 +26,27 @@ export default function AcceptInvite({ token }: { token: string }) {
   // Set once the invitation is accepted but the profile couldn't be loaded: the user has joined,
   // and a reload restores the session from the refresh cookie.
   const [joinedOrg, setJoinedOrg] = useState<string | null>(null);
+  // Joined, but signing in still takes a code (or two-factor setup the organization requires).
+  const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
+    let pending: MfaChallenge | null;
     try {
-      await acceptInvitation(token, password, name);
+      pending = await acceptInvitation(token, password, name);
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
       return;
     }
     forgetEmailLinkToken("/approvals"); // the token is spent: never offer it for a retry
+    if (pending) {
+      setChallenge(pending);
+      setBusy(false);
+      return;
+    }
     try {
       await signedIn();
       leaveEmailLink("/approvals");
@@ -46,6 +55,20 @@ export default function AcceptInvite({ token }: { token: string }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (challenge) {
+    return (
+      <SecondStep
+        challenge={challenge}
+        onSignedIn={async () => {
+          await signedIn();
+          leaveEmailLink("/approvals");
+        }}
+        // Already a member: cancelling leads to the ordinary sign-in.
+        onCancel={() => leaveEmailLink("/")}
+      />
+    );
   }
 
   if (joinedOrg) {

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -215,17 +215,25 @@ function MemberRow({ member: m, isMe, myRole }: { member: Member; isMe: boolean;
   });
   const remove = useMutation({ mutationFn: () => api(`/v1/users/${m.id}`, { method: "DELETE" }), onSuccess: done });
   const [confirmingReset, setConfirmingReset] = useState(false);
+  // Set once the API accepts a reset, so the row stops offering it even if refreshing the list fails;
+  // cleared when the list catches up, so a later setup by the member shows again.
+  const [mfaReset, setMfaReset] = useState(false);
+  useEffect(() => {
+    if (!m.mfa) setMfaReset(false);
+  }, [m.mfa]);
+  const hasMfa = m.mfa && !mfaReset;
   const resetMfa = useMutation({
     mutationFn: () => api(`/v1/users/${m.id}/mfa`, { method: "DELETE" }),
-    // Keep the confirmation up until the refreshed list arrives, so the stale row can't offer the reset again.
-    onSuccess: async () => {
-      await done();
+    onSuccess: () => {
+      setMfaReset(true);
       setConfirmingReset(false);
+      return done();
     },
   });
   // Mirrors the API: only owners change owners, and nobody removes themselves.
   const editable = m.role !== "owner" || myRole === "owner";
-  const error = changeRole.error ?? remove.error ?? resetMfa.error;
+  // The most recent action's error, so an older failure can't hide a newer one.
+  const error = [changeRole, remove, resetMfa].filter((x) => x.error).sort((a, b) => b.submittedAt - a.submittedAt)[0]?.error ?? null;
   const idle = !confirming && !confirmingReset;
 
   return (
@@ -235,7 +243,7 @@ function MemberRow({ member: m, isMe, myRole }: { member: Member; isMe: boolean;
           <span className="font-medium">{m.name || m.email}</span>
           {m.name && <span className="text-muted-foreground"> · {m.email}</span>}
           {isMe && <span className="text-muted-foreground"> (you)</span>}
-          {m.mfa && (
+          {hasMfa && (
             <Badge variant="secondary" className="ml-2" title="Two-factor authentication is on">
               2FA
             </Badge>
@@ -255,7 +263,7 @@ function MemberRow({ member: m, isMe, myRole }: { member: Member; isMe: boolean;
               </option>
             ))}
           </select>
-          {!isMe && editable && m.mfa && idle && (
+          {!isMe && editable && hasMfa && idle && (
             <Button size="sm" variant="ghost" onClick={() => setConfirmingReset(true)}>
               Reset 2FA
             </Button>

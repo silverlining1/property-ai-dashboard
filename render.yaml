@@ -2,7 +2,8 @@ services:
   - type: web
     name: propai-property-manager
     env: node
-    buildCommand: npm ci && npm run build
+    # The build needs devDependencies (vite, tsx, esbuild); NODE_ENV=production would make npm skip them.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
     domains:

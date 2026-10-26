@@ -1,14 +1,15 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { api, canManageTeam, ROLES, type Invitation, type Member, type Role } from "./api";
 import { FormError, errorText } from "./AuthCard";
 import { ago, label } from "./format";
-import { useMe } from "./session";
+import { useMe, useSession } from "./session";
 
 const ROLE_HELP: Record<Role, string> = {
   owner: "Everything, including managing owners",
@@ -31,10 +32,51 @@ export default function Team() {
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-xl font-semibold">Team</h1>
+      <RequireTwoFactor />
       <InviteForm />
       <PendingInvitations />
       <Members />
     </div>
+  );
+}
+
+function RequireTwoFactor() {
+  const me = useMe();
+  const { refreshMe, updateMfa } = useSession();
+  const update = useMutation({
+    mutationFn: (require_mfa: boolean) => api("/v1/settings", { method: "PATCH", body: { security: { require_mfa } } }),
+    onSuccess: async (_data, require_mfa) => {
+      updateMfa({ required: require_mfa });
+      await refreshMe().catch(() => undefined);
+    },
+  });
+  const required = update.isPending ? Boolean(update.variables) : me.mfa.required;
+  // The API refuses to require it from someone who doesn't have it: they'd be locked out at their next sign-in.
+  const blocked = !required && !me.mfa.enabled;
+
+  return (
+    <Card>
+      <CardContent className="pt-6 space-y-2">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="require-mfa" className="font-medium">
+              Require two-factor authentication
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Everyone must enter a code from an authenticator app (or one of their recovery codes) when signing in.
+              Members without it set it up at their next sign-in.
+            </p>
+            {blocked && (
+              <p className="text-sm text-muted-foreground">
+                Turn it on for your own account first, on the <a className="text-primary underline-offset-4 hover:underline" href="#/account">Account</a> page.
+              </p>
+            )}
+          </div>
+          <Switch id="require-mfa" checked={required} disabled={blocked || update.isPending} onCheckedChange={(v) => update.mutate(v)} />
+        </div>
+        <FormError error={update.error ? errorText(update.error) : null} />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -172,9 +214,27 @@ function MemberRow({ member: m, isMe, myRole }: { member: Member; isMe: boolean;
     onSuccess: done,
   });
   const remove = useMutation({ mutationFn: () => api(`/v1/users/${m.id}`, { method: "DELETE" }), onSuccess: done });
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  // Set once the API accepts a reset, so the row stops offering it even if refreshing the list fails;
+  // cleared when the list catches up, so a later setup by the member shows again.
+  const [mfaReset, setMfaReset] = useState(false);
+  useEffect(() => {
+    if (!m.mfa) setMfaReset(false);
+  }, [m.mfa]);
+  const hasMfa = m.mfa && !mfaReset;
+  const resetMfa = useMutation({
+    mutationFn: () => api(`/v1/users/${m.id}/mfa`, { method: "DELETE" }),
+    onSuccess: () => {
+      setMfaReset(true);
+      setConfirmingReset(false);
+      return done();
+    },
+  });
   // Mirrors the API: only owners change owners, and nobody removes themselves.
   const editable = m.role !== "owner" || myRole === "owner";
-  const error = changeRole.error ?? remove.error;
+  // Only the most recent action's outcome: an older failure neither hides a newer one nor outlives a newer success.
+  const error = [changeRole, remove, resetMfa].sort((a, b) => b.submittedAt - a.submittedAt)[0].error;
+  const idle = !confirming && !confirmingReset;
 
   return (
     <li data-testid="member" className="px-3 py-2 text-sm space-y-1">
@@ -183,6 +243,11 @@ function MemberRow({ member: m, isMe, myRole }: { member: Member; isMe: boolean;
           <span className="font-medium">{m.name || m.email}</span>
           {m.name && <span className="text-muted-foreground"> · {m.email}</span>}
           {isMe && <span className="text-muted-foreground"> (you)</span>}
+          {hasMfa && (
+            <Badge variant="secondary" className="ml-2" title="Two-factor authentication is on">
+              2FA
+            </Badge>
+          )}
         </span>
         <span className="flex items-center gap-2">
           <select
@@ -198,7 +263,22 @@ function MemberRow({ member: m, isMe, myRole }: { member: Member; isMe: boolean;
               </option>
             ))}
           </select>
-          {!isMe && editable && !confirming && (
+          {!isMe && editable && hasMfa && idle && (
+            <Button size="sm" variant="ghost" onClick={() => setConfirmingReset(true)}>
+              Reset 2FA
+            </Button>
+          )}
+          {confirmingReset && (
+            <>
+              <Button size="sm" variant="destructive" disabled={resetMfa.isPending} onClick={() => resetMfa.mutate()}>
+                Confirm reset
+              </Button>
+              <Button size="sm" variant="ghost" disabled={resetMfa.isPending} onClick={() => setConfirmingReset(false)}>
+                Cancel
+              </Button>
+            </>
+          )}
+          {!isMe && editable && idle && (
             <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
               Remove
             </Button>
@@ -215,6 +295,11 @@ function MemberRow({ member: m, isMe, myRole }: { member: Member; isMe: boolean;
           )}
         </span>
       </div>
+      {confirmingReset && (
+        <p className="text-xs text-muted-foreground">
+          Removes their authenticator and recovery codes and signs them out everywhere, for when they've lost their phone.
+        </p>
+      )}
       <FormError error={error ? errorText(error) : null} />
     </li>
   );

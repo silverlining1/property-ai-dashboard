@@ -13,6 +13,8 @@ interface SessionValue {
   signedIn: () => Promise<void>;
   /** Reloads the profile after a change to it (keeps the query cache). */
   refreshMe: () => Promise<void>;
+  /** Records a two-factor change the API just accepted, so a failed refreshMe() can't leave the pages showing the old state. */
+  updateMfa: (change: Partial<Me["mfa"]>) => void;
   logout: () => Promise<void>;
 }
 
@@ -74,12 +76,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (gen === generation.current) setState((prev) => (prev.status === "signed-in" ? { status: "signed-in", me } : prev));
   }, []);
 
+  const updateMfa = useCallback((change: Partial<Me["mfa"]>) => {
+    setState((prev) => (prev.status === "signed-in" ? { status: "signed-in", me: { ...prev.me, mfa: { ...prev.me.mfa, ...change } } } : prev));
+  }, []);
+
   const logout = useCallback(async () => {
     await apiLogout();
     setState({ status: "signed-out" });
   }, []);
 
-  return <SessionContext.Provider value={{ state, signedIn, refreshMe, logout }}>{children}</SessionContext.Provider>;
+  return <SessionContext.Provider value={{ state, signedIn, refreshMe, updateMfa, logout }}>{children}</SessionContext.Provider>;
 }
 
 export function useSession(): SessionValue {

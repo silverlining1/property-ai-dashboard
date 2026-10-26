@@ -268,7 +268,7 @@ type Panel = "idle" | "setup" | "codes" | "replace" | "disable";
 
 export function TwoFactorCard() {
   const me = useMe();
-  const { refreshMe } = useSession();
+  const { refreshMe, updateMfa } = useSession();
   const [panel, setPanel] = useState<Panel>("idle");
   const [setup, setSetup] = useState<MfaSetup | null>(null);
   const [codes, setCodes] = useState<string[]>([]);
@@ -298,6 +298,7 @@ export function TwoFactorCard() {
   async function showCodes(newCodes: string[]) {
     setCodes(newCodes);
     setPanel("codes");
+    updateMfa({ enabled: true, recovery_codes_left: newCodes.length });
     await refreshMe().catch(() => undefined);
   }
 
@@ -356,6 +357,7 @@ export function TwoFactorCard() {
             withPassword
             onSubmit={async ({ password, code }) => {
               await disableMfa(password, code);
+              updateMfa({ enabled: false, recovery_codes_left: 0 });
               await refreshMe().catch(() => undefined);
               reset();
             }}

@@ -42,10 +42,13 @@ export default function Team() {
 
 function RequireTwoFactor() {
   const me = useMe();
-  const { refreshMe } = useSession();
+  const { refreshMe, updateMfa } = useSession();
   const update = useMutation({
     mutationFn: (require_mfa: boolean) => api("/v1/settings", { method: "PATCH", body: { security: { require_mfa } } }),
-    onSuccess: () => refreshMe(),
+    onSuccess: async (_data, require_mfa) => {
+      updateMfa({ required: require_mfa });
+      await refreshMe().catch(() => undefined);
+    },
   });
   const required = update.isPending ? Boolean(update.variables) : me.mfa.required;
   // The API refuses to require it from someone who doesn't have it: they'd be locked out at their next sign-in.

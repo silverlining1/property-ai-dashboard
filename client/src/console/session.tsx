@@ -31,6 +31,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>({ status: "loading" });
   // Bumped by signedIn(): the mount-time session restore must not overwrite a sign-in that started later.
   const generation = useRef(0);
+  // Bumped by updateMfa(): a profile load that started before an accepted change must not undo it.
+  const mfaRevision = useRef(0);
 
   const loadMe = useCallback(async (gen: number) => {
     try {
@@ -72,11 +74,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const refreshMe = useCallback(async () => {
     const gen = generation.current;
+    const rev = mfaRevision.current;
     const me = await fetchMe();
-    if (gen === generation.current) setState((prev) => (prev.status === "signed-in" ? { status: "signed-in", me } : prev));
+    if (gen === generation.current && rev === mfaRevision.current) setState((prev) => (prev.status === "signed-in" ? { status: "signed-in", me } : prev));
   }, []);
 
   const updateMfa = useCallback((change: Partial<Me["mfa"]>) => {
+    mfaRevision.current++;
     setState((prev) => (prev.status === "signed-in" ? { status: "signed-in", me: { ...prev.me, mfa: { ...prev.me.mfa, ...change } } } : prev));
   }, []);
 

@@ -217,9 +217,10 @@ function MemberRow({ member: m, isMe, myRole }: { member: Member; isMe: boolean;
   const [confirmingReset, setConfirmingReset] = useState(false);
   const resetMfa = useMutation({
     mutationFn: () => api(`/v1/users/${m.id}/mfa`, { method: "DELETE" }),
-    onSuccess: () => {
+    // Keep the confirmation up until the refreshed list arrives, so the stale row can't offer the reset again.
+    onSuccess: async () => {
+      await done();
       setConfirmingReset(false);
-      done();
     },
   });
   // Mirrors the API: only owners change owners, and nobody removes themselves.

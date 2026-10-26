@@ -208,7 +208,7 @@ function MemberRow({ member: m, isMe, myRole }: { member: Member; isMe: boolean;
               <Button size="sm" variant="destructive" disabled={remove.isPending} onClick={() => remove.mutate()}>
                 Confirm remove
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+              <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => setConfirming(false)}>
                 Cancel
               </Button>
             </>

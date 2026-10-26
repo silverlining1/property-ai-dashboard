@@ -232,8 +232,8 @@ function MemberRow({ member: m, isMe, myRole }: { member: Member; isMe: boolean;
   });
   // Mirrors the API: only owners change owners, and nobody removes themselves.
   const editable = m.role !== "owner" || myRole === "owner";
-  // The most recent action's error, so an older failure can't hide a newer one.
-  const error = [changeRole, remove, resetMfa].filter((x) => x.error).sort((a, b) => b.submittedAt - a.submittedAt)[0]?.error ?? null;
+  // Only the most recent action's outcome: an older failure neither hides a newer one nor outlives a newer success.
+  const error = [changeRole, remove, resetMfa].sort((a, b) => b.submittedAt - a.submittedAt)[0].error;
   const idle = !confirming && !confirmingReset;
 
   return (

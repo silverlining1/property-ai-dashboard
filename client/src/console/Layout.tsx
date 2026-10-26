@@ -3,12 +3,15 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Logo } from "./Logo";
+import { canManageTeam } from "./api";
 import { useMe, useSession } from "./session";
 import { label } from "./format";
 
 const NAV = [
   { href: "/approvals", text: "Approvals" },
   { href: "/conversations", text: "Conversations" },
+  { href: "/team", text: "Team", teamOnly: true },
+  { href: "/account", text: "Account" },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -33,7 +36,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-6 min-w-0">
             <Logo />
             <nav className="flex items-center gap-1" aria-label="Main">
-              {NAV.map((n) => (
+              {NAV.filter((n) => !n.teamOnly || canManageTeam(me.role)).map((n) => (
                 <Link
                   key={n.href}
                   href={n.href}

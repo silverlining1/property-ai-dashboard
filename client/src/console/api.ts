@@ -108,6 +108,54 @@ export function signup(org_name: string, name: string, email: string, password: 
   return authRequest("/v1/auth/signup", { org_name, name, email, password });
 }
 
+/** Joins the org from an emailed invitation and signs in as the invited account. */
+export function acceptInvitation(token: string, password: string, name: string) {
+  sessionEpoch += 1;
+  return authRequest("/v1/invitations/accept", { token, password, name });
+}
+
+/** Unauthenticated JSON POST for the emailed-link pages. */
+export async function publicPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await errorFrom(res);
+  return (res.status === 204 ? undefined : await res.json()) as T;
+}
+
+/** Completes a password reset. The API signs the account out everywhere, so this browser's session ends too. */
+export async function resetPassword(token: string, password: string): Promise<void> {
+  const epoch = sessionEpoch;
+  await publicPost("/v1/auth/password-reset/confirm", { token, password });
+  if (epoch === sessionEpoch) endSession(); // don't end a session that started while this was in flight
+}
+
+/** Changes the password. Other sessions end; this one continues with the fresh tokens (and cookie) returned. */
+export async function changePassword(current_password: string, new_password: string): Promise<void> {
+  const epoch = sessionEpoch;
+  const send = () =>
+    fetch(`${API_URL}/v1/me/password`, {
+      method: "POST",
+      credentials: "include",
+      headers: { ...WEB_CLIENT, "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      body: JSON.stringify({ current_password, new_password }),
+    });
+  let res = await send();
+  if (res.status === 401) {
+    // Expired access token: refresh once and retry, as api() does. A 401 means nothing was changed.
+    if (epoch !== sessionEpoch || !(await refreshSession()) || epoch !== sessionEpoch) throw await errorFrom(res);
+    res = await send();
+    // Fresh token still refused: the session is gone, as in api().
+    if (res.status === 401 && epoch === sessionEpoch) endSession();
+  }
+  if (!res.ok) throw await errorFrom(res);
+  const tokens = (await res.json()) as Tokens;
+  if (epoch !== sessionEpoch) throw new ApiError(401, "Signed out"); // a newer session replaced this one
+  setAccessToken(tokens.access_token);
+}
+
 /** Ends the session only once the server has cleared the refresh cookie; otherwise throws, so the UI
  *  never shows "signed out" while a reload would silently sign the user back in. */
 export function logout(): Promise<void> {
@@ -197,3 +245,33 @@ export interface Approval {
 }
 
 export const canDecide = (role: Role | undefined) => role === "owner" || role === "admin" || role === "manager";
+
+export const canManageTeam = (role: Role | undefined) => role === "owner" || role === "admin";
+
+export const ROLES: Role[] = ["owner", "admin", "manager", "staff", "viewer"];
+
+export interface Member {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  active: boolean;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  created_at: string;
+  expires_at: string;
+  expired: boolean;
+}
+
+export interface InvitationPreview {
+  email: string;
+  name: string;
+  role: Role;
+  org_name: string;
+  account_exists: boolean;
+}

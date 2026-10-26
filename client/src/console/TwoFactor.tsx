@@ -164,13 +164,18 @@ function VerifyStep({ challenge, onSignedIn, onCancel }: { challenge: MfaChallen
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Once the code is accepted it's spent: a retry after a failed profile load only retries the load.
+  const [verified, setVerified] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      await verifyMfa(challenge, code);
+      if (!verified) {
+        await verifyMfa(challenge, code);
+        setVerified(true);
+      }
       await onSignedIn();
     } catch (err) {
       setError(errorText(err));

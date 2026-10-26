@@ -60,8 +60,8 @@ function RequireTwoFactor() {
               Require two-factor authentication
             </Label>
             <p className="text-sm text-muted-foreground">
-              Everyone must enter a code from an authenticator app when signing in. Members without it set it up at their
-              next sign-in.
+              Everyone must enter a code from an authenticator app (or one of their recovery codes) when signing in.
+              Members without it set it up at their next sign-in.
             </p>
             {blocked && (
               <p className="text-sm text-muted-foreground">

@@ -336,3 +336,65 @@ export interface InvitationPreview {
   org_name: string;
   account_exists: boolean;
 }
+
+/** Staff and up can move work orders along; managers and up add or remove knowledge. */
+export const canWriteWorkOrders = (role: Role | undefined) => role !== undefined && role !== "viewer";
+
+export interface WorkOrder {
+  id: string;
+  trade: string;
+  description: string;
+  urgency: string;
+  status: WorkOrderStatus;
+  unit_id: string | null;
+  vendor_contact_id: string | null;
+  external_refs: Record<string, string>;
+  created_at: string;
+}
+
+export const WORK_ORDER_STATUSES = ["new", "assigned", "scheduled", "in_progress", "done", "cancelled"] as const;
+export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number];
+
+export interface CredentialField {
+  key: string;
+  label: string;
+  secret: boolean;
+  optional: boolean;
+}
+
+export interface ConnectorManifest {
+  key: string;
+  name: string;
+  category: string;
+  capabilities: string[];
+  auth: string;
+  status: "available" | "beta" | "planned";
+  notes: string;
+  fields: CredentialField[];
+}
+
+export interface ConnectorAccount {
+  id: string;
+  connector: string;
+  label: string;
+  status: string;
+  scopes: string[];
+  created_at: string;
+}
+
+export const KNOWLEDGE_KINDS = ["lease", "house_rules", "faq", "listing", "policy"] as const;
+
+export interface KnowledgeDoc {
+  id: string;
+  title: string;
+  kind: (typeof KNOWLEDGE_KINDS)[number];
+  property_id: string | null;
+}
+
+export interface OrgSettings {
+  name: string;
+  llm?: { provider?: string; model?: string; base_url?: string; pii_policy?: "redact" | "allow" };
+  approval?: { require_human_approval?: boolean; expiry_hours?: number; max_rounds?: number };
+  brand?: { signature?: string };
+  security?: { require_mfa?: boolean };
+}

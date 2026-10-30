@@ -5,13 +5,17 @@ import { useHashLocation } from "wouter/use-hash-location";
 import AcceptInvite from "./AcceptInvite";
 import Account from "./Account";
 import Approvals from "./Approvals";
+import Connectors from "./Connectors";
 import Conversations from "./Conversations";
 import { useEmailLink } from "./emailLinks";
+import Knowledge from "./Knowledge";
 import Layout from "./Layout";
 import Login from "./Login";
 import ResetPassword from "./ResetPassword";
 import { SessionProvider, useSession } from "./session";
+import Settings from "./Settings";
 import Team from "./Team";
+import WorkOrders from "./WorkOrders";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: true } },
@@ -43,7 +47,11 @@ function Routes() {
         <Route path="/approvals" component={Approvals} />
         <Route path="/conversations/:id">{(p) => <Conversations id={p.id} />}</Route>
         <Route path="/conversations">{() => <Conversations />}</Route>
+        <Route path="/work-orders" component={WorkOrders} />
+        <Route path="/knowledge" component={Knowledge} />
+        <Route path="/connectors" component={Connectors} />
         <Route path="/team" component={Team} />
+        <Route path="/settings" component={Settings} />
         <Route path="/account" component={Account} />
         <Route>
           <Redirect to="/approvals" />

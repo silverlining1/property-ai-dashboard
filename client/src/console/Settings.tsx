@@ -100,7 +100,11 @@ function useSave() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: Partial<Omit<OrgSettings, "name">>) => api<OrgSettings>("/v1/settings", { method: "PATCH", body: patch }),
-    onSuccess: (updated) => qc.setQueryData(["settings"], (prev: OrgSettings | undefined) => ({ ...updated, name: prev?.name ?? "" })),
+    onSuccess: (updated) => {
+      // Only while the page is open: a save that settles after it closed must not cache values for the next visit.
+      if (!qc.getQueryCache().find({ queryKey: ["settings"] })?.getObserversCount()) return;
+      qc.setQueryData(["settings"], (prev: OrgSettings | undefined) => ({ ...updated, name: prev?.name ?? "" }));
+    },
   });
 }
 

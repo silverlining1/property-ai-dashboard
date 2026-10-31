@@ -6,9 +6,9 @@ export function Logo() {
         <path d="M7 14h4l2-5 3 10 2-5h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         <circle cx="21" cy="8" r="2" fill="currentColor" />
       </svg>
-      <div>
+      <div className="whitespace-nowrap">
         <span className="font-semibold text-sm">PropAI</span>
-        <span className="text-muted-foreground text-sm"> · Code Alchemist Labs</span>
+        <span className="hidden xl:inline text-muted-foreground text-sm"> · Code Alchemist Labs</span>
       </div>
     </div>
   );

@@ -49,9 +49,11 @@ function ConnectorsPage() {
   const catalog = useQuery({ queryKey: ["connector-catalog"], queryFn: () => api<ConnectorManifest[]>("/v1/connectors/catalog") });
   const accounts = useQuery({ queryKey: ["connectors"], queryFn: () => api<ConnectorAccount[]>("/v1/connectors") });
   const byKey = new Map(catalog.data?.map((m) => [m.key, m]));
-  const groups = CATEGORY_ORDER.map((c) => ({ category: c, items: catalog.data?.filter((m) => m.category === c) ?? [] })).filter(
-    (g) => g.items.length > 0,
-  );
+  // Known kinds first, in a set order; any kind the API adds later still shows, after them.
+  const extra = Array.from(new Set(catalog.data?.map((m) => m.category))).filter((c) => !CATEGORY_ORDER.includes(c));
+  const groups = [...CATEGORY_ORDER, ...extra]
+    .map((c) => ({ category: c, items: catalog.data?.filter((m) => m.category === c) ?? [] }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <div className="space-y-6">

@@ -26,7 +26,9 @@ export default function Settings() {
 }
 
 function SettingsPage() {
-  const { data, isLoading, error } = useQuery({ queryKey: ["settings"], queryFn: () => api<OrgSettings>("/v1/settings") });
+  // gcTime 0: the cache is dropped when the page closes, so the forms below never start from values that may have
+  // changed since (saving them would write the old values back).
+  const { data, isLoading, error } = useQuery({ queryKey: ["settings"], queryFn: () => api<OrgSettings>("/v1/settings"), gcTime: 0 });
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="space-y-1">
@@ -63,8 +65,11 @@ function Section({ title, description, onSubmit, pending, error, saved, children
   saved: boolean;
   children: ReactNode;
 }) {
+  // Edited since the last save: the last save's "Saved." or error no longer describes what's in the form.
+  const [edited, setEdited] = useState(false);
   function submit(e: FormEvent) {
     e.preventDefault();
+    setEdited(false);
     onSubmit();
   }
   return (
@@ -74,10 +79,10 @@ function Section({ title, description, onSubmit, pending, error, saved, children
         <p className="text-sm text-muted-foreground">{description}</p>
       </CardHeader>
       <CardContent>
-        <form onSubmit={submit} className="space-y-3" aria-label={title}>
+        <form onSubmit={submit} onChange={() => setEdited(true)} className="space-y-3" aria-label={title}>
           {children}
-          <FormError error={error ? errorText(error) : null} />
-          {saved && (
+          <FormError error={error && !edited ? errorText(error) : null} />
+          {saved && !edited && (
             <p role="status" className="text-sm text-muted-foreground">
               Saved.
             </p>

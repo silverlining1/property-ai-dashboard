@@ -4,9 +4,6 @@ import { rm, readFile } from "fs/promises";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
-// NOTE: better-sqlite3 and drizzle-orm are intentionally NOT in the allowlist
-// so they remain external — better-sqlite3 is a native module (.node binary)
-// that must be loaded from node_modules at runtime, not bundled by esbuild.
 const allowlist = [
   "@google/generative-ai",
   "axios",
@@ -30,7 +27,6 @@ const allowlist = [
   "xlsx",
   "zod",
   "zod-validation-error",
-  "@anthropic-ai/sdk",
 ];
 
 async function buildAll() {
@@ -47,9 +43,6 @@ async function buildAll() {
   ];
   const externals = allDeps.filter((dep) => !allowlist.includes(dep));
 
-  // Always force-externalize native modules and libsql regardless of allowlist
-  const forceExternal = ["@libsql/client"];
-
   await esbuild({
     entryPoints: ["server/index.ts"],
     platform: "node",
@@ -60,7 +53,7 @@ async function buildAll() {
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,
-    external: [...new Set([...externals, ...forceExternal])],
+    external: externals,
     logLevel: "info",
   });
 }

@@ -9,7 +9,6 @@ const allowlist = [
   "axios",
   "cors",
   "date-fns",
-  "drizzle-zod",
   "express",
   "express-rate-limit",
   "express-session",
@@ -26,7 +25,6 @@ const allowlist = [
   "ws",
   "xlsx",
   "zod",
-  "zod-validation-error",
 ];
 
 async function buildAll() {
